@@ -1,6 +1,6 @@
 # vault-minio-oidc
 
-Delegating MinIO S3 authentication to Vault, using STS `AssumeRoleWithWebIdentity` and OpenID Connect.
+Delegating [MinIO](https://min.io/) [S3](https://aws.amazon.com/s3/) authentication to [Vault](https://www.vaultproject.io/), using [`AssumeRoleWithWebIdentity`](https://min.io/docs/minio/linux/developers/security-token-service/AssumeRoleWithWebIdentity.html) and [OpenID Connect](https://en.wikipedia.org/wiki/OpenID).
 
 ## Startup
 
@@ -90,4 +90,22 @@ This gives you back the access/secret key pair valid for 1 hour:
 		<SubjectFromWebIdentityToken>f17856fb-ccaf-22d9-c1de-0ed1040c6424</SubjectFromWebIdentityToken>
 	</AssumeRoleWithWebIdentityResult>
 </AssumeRoleWithWebIdentityResponse>
+```
+
+## Test credentials
+
+In order to use these credentials with the S3 API, you will need all 3 values returned (AccessKeyId, SecretAccessKey, SessionToken):
+
+```toml
+# ~/.aws/credentials
+[minio]
+aws_access_key_id = LV20XAD6FYRNE2O6PI8U
+aws_secret_access_key = SEwmpmPIVIvsW2ZPhylDKA6tkQNg4IanF1KvrdcB
+aws_session_token = eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3NLZXkiOiJMVjIwWEFENkZZUk5FMk82UEk4VSIsImF1ZCI6InB2YWIzN3gzTmdSNEk4VFc4M2RvOUxRTVFrclFlMEt2IiwiZXhwIjoxNzM5Mzg4MDUzLCJpYXQiOjE3MzkzODQxNDUsImlzcyI6Imh0dHA6Ly8wLjAuMC4wOjgyMDAvdjEvaWRlbnRpdHkvb2lkYyIsIm5hbWVzcGFjZSI6InJvb3QiLCJwb2xpY3kiOiJyZWFkb25seSIsInN1YiI6ImYxNzg1NmZiLWNjYWYtMjJkOS1jMWRlLTBlZDEwNDBjNjQyNCJ9.nWXSLB_GCTRAiyd_62otGWuEWIy8pDSjqaWtT_zh2Fvb_W0GgN2siGjLgjV2CzOHcTXEOpHpmdNSRgc_lbnPOw
+```
+
+Example, list buckets with [s5cmd](https://github.com/peak/s5cmd):
+
+```bash
+s5cmd --profile minio --endpoint-url=http://localhost:9000 ls
 ```
