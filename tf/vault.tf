@@ -15,17 +15,17 @@ resource "vault_generic_endpoint" "user1" {
   })
 }
 
-// Creates an entity to represent the user in Vault. The entity has a list of MinIO policies attached to it.
-// An entity can have multiple aliases, which are used to authenticate the entity.
+// Creates an entity to represent the user in Vault. The entity has a list of MinIO policies attached to it in the metadata.
+// An entity can have multiple aliases (authentication methods).
 resource "vault_identity_entity" "user1" {
   name     = "user1"
-  policies = [vault_policy.minio_sts.name]
+  external_policies = true
   metadata = {
     minio_policies = "readonly"
   }
 }
 
-// Create an alias for the user in the userpass backend, and tie it to the entity we created above.
+// Tie the userpass "user1" user to its entity.
 resource "vault_identity_entity_alias" "test" {
   name           = "user1"
   mount_accessor = vault_auth_backend.userpass.accessor
@@ -33,6 +33,7 @@ resource "vault_identity_entity_alias" "test" {
 }
 
 // Next, we create an "assigmment" which is used to determine which entities are allowed to access a particular client (MinIO).
+// We could use groups, but here we just list the users (entities) directly.
 resource "vault_identity_oidc_assignment" "minio_users" {
   name = "minio_users"
   entity_ids = [
@@ -41,8 +42,16 @@ resource "vault_identity_oidc_assignment" "minio_users" {
   group_ids = []
 }
 
+// Create a signing key. This key will be used to sign JWTs for the OIDC client and also for the MinIO STS role.
+resource "vault_identity_oidc_key" "minio" {
+  name             = "minio"
+  algorithm        = "RS256"
+  rotation_period  = 3600
+  verification_ttl = 3600
+}
+
 // We create the OIDC client for MinIO. This client will be used by MinIO to authenticate users.
-// A client ID and client secret will be available in the Vault UI to be pasted into the MinIO configuration.
+// A client ID and client secret will be returned to be pasted into the MinIO configuration.
 resource "vault_identity_oidc_client" "minio" {
   name = "minio"
   key  = vault_identity_oidc_key.minio.name
@@ -54,14 +63,6 @@ resource "vault_identity_oidc_client" "minio" {
   ]
   id_token_ttl     = 3600
   access_token_ttl = 3600
-}
-
-// Create a signing key for the OIDC client.
-resource "vault_identity_oidc_key" "minio" {
-  name             = "minio"
-  algorithm        = "RS256"
-  rotation_period  = 3600
-  verification_ttl = 3600
 }
 
 // Allow the MinIO client to use the signing key.
@@ -81,21 +82,9 @@ resource "vault_identity_oidc_scope" "minio_policy" {
   description = "MinIO policy scope"
 }
 
-// A Vault policy that allows generating a MinIO STS token.
-// Note; the policy refers to a resource that doesn't exist yet otherwise it creates a cycle.
-resource "vault_policy" "minio_sts" {
-  name = "minio_sts"
-
-  policy = <<EOT
-path "identity/oidc/token/minio" {
-  capabilities = ["read"]
-}
-EOT
-}
-
 // In order to allow issuing manual tokens (for STS), we need to create a role for the MinIO client.
 // For MinIO to accept the tokens, it must have the same client_id as the client application.
-resource "vault_identity_oidc_role" "minio" {
+resource "vault_identity_oidc_role" "minio_sts" {
   name      = "minio"
   key       = vault_identity_oidc_key.minio.name
   client_id = vault_identity_oidc_client.minio.client_id
@@ -103,10 +92,30 @@ resource "vault_identity_oidc_role" "minio" {
   template  = vault_identity_oidc_scope.minio_policy.template
 }
 
-// Allow the MinIO STS to use the signing key.
+// Allow the MinIO STS role to use the same signing key as the OIDC client for MinIO.
 resource "vault_identity_oidc_key_allowed_client_id" "minio_sts" {
   key_name          = vault_identity_oidc_key.minio.name
-  allowed_client_id = vault_identity_oidc_role.minio.client_id
+  allowed_client_id = vault_identity_oidc_role.minio_sts.client_id
+}
+
+// A Vault policy that allows generating a MinIO STS token.
+resource "vault_policy" "minio_sts" {
+  name = "minio_sts"
+
+  policy = <<EOT
+path "identity/oidc/token/${vault_identity_oidc_role.minio_sts.name}" {
+  capabilities = ["read"]
+}
+EOT
+}
+
+// Give access to our user1 entity to the policy allowing the creation of signed MinIO STS tokens.
+resource "vault_identity_entity_policies" "policies" {
+  policies = [
+    vault_policy.minio_sts.name
+  ]
+  exclusive = false // In case there are other policies to be attached separately.
+  entity_id = vault_identity_entity.user1.id
 }
 
 // Create the OIDC provider for MinIO. This provider will be used by MinIO to authenticate users.
