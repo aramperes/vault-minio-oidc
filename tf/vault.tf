@@ -10,19 +10,16 @@ resource "vault_generic_endpoint" "user1" {
   path                 = "auth/userpass/users/user1"
   ignore_absent_fields = true
 
-  data_json = <<EOT
-{
-  "policies": [],
-  "password": "changeme"
-}
-EOT
+  data_json = jsonencode({
+    password = "changeme"
+  })
 }
 
 // Creates an entity to represent the user in Vault. The entity has a list of MinIO policies attached to it.
 // An entity can have multiple aliases, which are used to authenticate the entity.
 resource "vault_identity_entity" "user1" {
   name     = "user1"
-  policies = []
+  policies = [vault_policy.minio_sts.name]
   metadata = {
     minio_policies = "readonly"
   }
@@ -84,8 +81,35 @@ resource "vault_identity_oidc_scope" "minio_policy" {
   description = "MinIO policy scope"
 }
 
+// A Vault policy that allows generating a MinIO STS token.
+// Note; the policy refers to a resource that doesn't exist yet otherwise it creates a cycle.
+resource "vault_policy" "minio_sts" {
+  name = "minio_sts"
+
+  policy = <<EOT
+path "identity/oidc/token/minio" {
+  capabilities = ["read"]
+}
+EOT
+}
+
+// In order to allow issuing manual tokens (for STS), we need to create a role for the MinIO client.
+// For MinIO to accept the tokens, it must have the same client_id as the client application.
+resource "vault_identity_oidc_role" "minio" {
+  name      = "minio"
+  key       = vault_identity_oidc_key.minio.name
+  client_id = vault_identity_oidc_client.minio.client_id
+  ttl       = 3600
+  template  = vault_identity_oidc_scope.minio_policy.template
+}
+
+// Allow the MinIO STS to use the signing key.
+resource "vault_identity_oidc_key_allowed_client_id" "minio_sts" {
+  key_name          = vault_identity_oidc_key.minio.name
+  allowed_client_id = vault_identity_oidc_role.minio.client_id
+}
+
 // Create the OIDC provider for MinIO. This provider will be used by MinIO to authenticate users.
-// Config URL: http://vault:8200/v1/identity/oidc/provider/minio/.well-known/openid-configuration
 resource "vault_identity_oidc_provider" "minio" {
   name          = "minio"
   https_enabled = false
@@ -96,4 +120,14 @@ resource "vault_identity_oidc_provider" "minio" {
   scopes_supported = [
     vault_identity_oidc_scope.minio_policy.name
   ]
+}
+
+output "minio_oidc_config" {
+  value = {
+    config_url    = "http://${vault_identity_oidc_provider.minio.issuer_host}/v1/identity/oidc/provider/${vault_identity_oidc_provider.minio.name}/.well-known/openid-configuration"
+    client_id     = vault_identity_oidc_client.minio.client_id
+    client_secret = nonsensitive(vault_identity_oidc_client.minio.client_secret)
+    scopes        = vault_identity_oidc_scope.minio_policy.name
+    redirect_uri  = tolist(vault_identity_oidc_client.minio.redirect_uris)[0]
+  }
 }
