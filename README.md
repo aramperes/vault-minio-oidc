@@ -18,7 +18,7 @@ An example can be bootstrapped using Terraform:
 
 ```bash
 cd tf/
-tf apply
+terraform apply
 ```
 
 This will print the information you need to configure the MinIO OIDC provider. Example:
@@ -116,6 +116,6 @@ These are the steps the user takes to go from authenticating to Vault, to perfor
 
 ![Minio STS Diagram](./.github/minio-sts.png)
 
-This is a representation of the Vault configuration for this proof of concept, as defined in `tf/vault.tf`:
+This is a representation of the Vault configuration for this proof of concept, as defined in [`tf/vault.tf`](./tf/vault.tf):
 
 ![Vault OIDC Diagram](./.github/vault-oidc.png)
