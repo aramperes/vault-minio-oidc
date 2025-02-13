@@ -112,6 +112,10 @@ s5cmd --profile minio --endpoint-url=http://localhost:9000 ls
 
 ## Diagrams
 
+These are the steps the user takes to go from authenticating to Vault, to performing actions in Minio S3, through the STS `AssumeRoleWithWebIdentity` flow:
+
+![Minio STS Diagram](./.github/minio-sts.png)
+
 This is a representation of the Vault configuration for this proof of concept, as defined in `tf/vault.tf`:
 
 ![Vault OIDC Diagram](./.github/vault-oidc.png)
