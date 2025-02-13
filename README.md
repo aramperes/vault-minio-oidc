@@ -109,3 +109,9 @@ Example, list buckets with [s5cmd](https://github.com/peak/s5cmd):
 ```bash
 s5cmd --profile minio --endpoint-url=http://localhost:9000 ls
 ```
+
+## Diagrams
+
+This is a representation of the Vault configuration for this proof of concept, as defined in `tf/vault.tf`:
+
+![Vault OIDC Diagram](./.github/vault-oidc.png)
